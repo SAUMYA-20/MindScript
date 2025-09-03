@@ -196,62 +196,85 @@ export function JournalEditor({ onAddEntry }) {
   // };
 
   const analyzeEntry = async () => {
-  if (!content.trim()) return;
-  setIsAnalyzing(true);
+    if (!content.trim()) return;
+    setIsAnalyzing(true);
+
+    try {
+      const response = await fetch(
+        "http://localhost:5000/api/journals/analyze",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content }),
+        }
+      );
+
+      if (!response.ok) throw new Error("Failed to reach backend");
+
+      const data = await response.json();
+      const normalizedMood = (data.mood || "neutral")
+        .replace(/['"]+/g, "")
+        .toLowerCase();
+      setAiAnalysis({
+        mood: normalizedMood, // ✅ trust backend, fallback to neutral
+        summary: data.summary || "No summary generated.",
+        themes: data.themes || [], // if you add themes later
+        prompts: data.prompts || [],
+      });
+      // console.log("📩 Backend response:", data);
+    } 
+    // eslint-disable-next-line no-unused-vars
+    catch (err) {
+      // console.error("Error analyzing entry:", err);
+      setAiAnalysis({
+        mood: "neutral",
+        summary: "Could not generate summary.",
+        themes: [],
+        prompts: [],
+      });
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const saveEntry = async () => {
+  if (!content.trim() || !aiAnalysis) return;
+
+  const entry = {
+    content: content,
+    date: new Date(),
+    mood: aiAnalysis.mood || "",
+    aiSummary: aiAnalysis.summary || "",
+    themes: aiAnalysis.themes || [],
+    prompts: aiAnalysis.prompts || [],
+    shared: shareWithCommunity || false,
+  };
 
   try {
-    const response = await fetch("http://localhost:5000/api/journals/analyze", {
+    const res = await fetch("http://localhost:5000/api/journals", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content }),
+      body: JSON.stringify(entry),
     });
 
-    if (!response.ok) throw new Error("Failed to reach backend");
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(errText || "Failed to save entry");
+    }
 
-    const data = await response.json();
-    const normalizedMood = (data.mood || "neutral").replace(/['"]+/g, "").toLowerCase();
-    setAiAnalysis({
-      mood: normalizedMood,  // ✅ trust backend, fallback to neutral
-      summary: data.summary || "No summary generated.",
-      themes: data.themes || [],     // if you add themes later
-      prompts: data.prompts || [],
-    });
-    // console.log("📩 Backend response:", data);
+    const savedEntry = await res.json();
+    console.log("✅ Entry saved:", savedEntry);
 
-  } 
-  // eslint-disable-next-line no-unused-vars
-  catch (err) {
-    // console.error("Error analyzing entry:", err);
-    setAiAnalysis({
-      mood: "neutral",
-      summary: "Could not generate summary.",
-      themes: [],
-      prompts: [],
-    });
-  } finally {
-    setIsAnalyzing(false);
-  }
-};
+    onAddEntry(savedEntry);
 
-
-
-  const saveEntry = () => {
-    if (!content.trim() || !aiAnalysis) return;
-
-    const entry = {
-      content,
-      date: new Date().toISOString().split("T")[0],
-      mood: aiAnalysis.mood,
-      aiSummary: aiAnalysis.summary,
-      themes: aiAnalysis.themes,
-      shared: shareWithCommunity,
-    };
-
-    onAddEntry(entry);
     setContent("");
     setAiAnalysis(null);
     setShareWithCommunity(false);
-  };
+  } catch (err) {
+    console.error("Failed to save entry:", err);
+  }
+};
+
 
   const getMoodColor = (mood) => {
     switch (mood) {
@@ -381,6 +404,7 @@ export function JournalEditor({ onAddEntry }) {
             </div>
 
             <Button
+              type="button"
               onClick={saveEntry}
               className="w-full flex items-center gap-2"
             >
