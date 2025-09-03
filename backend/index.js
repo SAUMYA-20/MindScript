@@ -1,14 +1,18 @@
-const express = require('express');
+const express = require("express");
+const cors = require("cors");
+const journalRoutes = require("./routes/journalRoutes");
+
 const app = express();
-require('dotenv').config();
+require("dotenv").config();
 const mongoose = require('mongoose');
 mongoose.connect(process.env.MONGO_URL).then(() => console.log("Connected MongoDB"));
+app.use(cors({ origin: "http://localhost:5173" }));
 
+// ✅ Parse JSON body
+app.use(express.json());
 
-app.listen(process.env.PORT, ()=>{
-    console.log("Server is running on port 3000");
-})
+// ✅ Routes
+app.use("/api/journals", journalRoutes);
 
-app.get('/', (req, res)=>{
-    res.send("Hello World");
-});
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
